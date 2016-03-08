@@ -27,16 +27,4 @@ BagfileParser::~BagfileParser()
   _bagfile.close();
 }
 
-std::vector<geometry_msgs::PoseStamped> BagfileParser::parsePoseStamped(std::string topic)
-{
-  std::vector<geometry_msgs::PoseStamped> retval;
-  rosbag::View view(_bagfile, rosbag::TopicQuery(topic));
 
-  foreach(rosbag::MessageInstance const m, view)
-  {
-    geometry_msgs::PoseStamped::ConstPtr pose = m.instantiate<geometry_msgs::PoseStamped>();
-    retval.push_back(*pose);
-  }
-
-  return retval;
-}
