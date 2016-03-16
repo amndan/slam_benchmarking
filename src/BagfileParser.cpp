@@ -15,11 +15,11 @@ BagfileParser::BagfileParser(std::string filename)
   }
   catch(...)
   {
-    std::cout << "cannot open bagfile -> exit" << std::endl;
+    std::cout << __PRETTY_FUNCTION__ << "--> cannot open bagfile -> exit" << std::endl;
     exit(1);
   }
   
-  std::cout << "opended bagfile with size: " << _bagfile.getSize() << std::endl;
+  std::cout << __PRETTY_FUNCTION__ << "--> opended bagfile with size: " << _bagfile.getSize() << std::endl;
 }
 
 BagfileParser::~BagfileParser()

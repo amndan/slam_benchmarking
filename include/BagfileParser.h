@@ -29,7 +29,6 @@ private:
 };
 
 
-
 template <class T> inline std::vector<T> BagfileParser::parse(std::string topic)
 {
   std::vector<T> retval;
@@ -38,9 +37,16 @@ template <class T> inline std::vector<T> BagfileParser::parse(std::string topic)
   foreach(rosbag::MessageInstance const m, view)
   {
     typename T::ConstPtr val = m.instantiate<T>();
-    retval.push_back(*val);
-  }
 
+    if (val != NULL)
+    {
+      retval.push_back(*val);
+    }
+    else
+    {
+      std::cout << __PRETTY_FUNCTION__ << "--> WARNING: got NULL pointer" << std::endl;
+    }
+  }
   return retval;
 }
 
