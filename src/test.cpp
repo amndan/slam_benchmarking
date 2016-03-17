@@ -23,7 +23,7 @@
 
 #define DIFFMAX 0.001
 #define MAXDIST 50
-#define SAMPLES 10
+#define SAMPLES 10000
 
 void checkInput(int argc, char ** argv);
 void printUsage();
@@ -38,6 +38,7 @@ Eigen::Matrix3d poseToMat(geometry_msgs::PoseStamped pose);
 void scaleTrans(Eigen::Matrix3d& trans, double factor);
 void evaluate();
 void printResult();
+void editData(); //testing code
 
 std::string g_pathSlam;
 std::string g_pathGt;
@@ -49,7 +50,7 @@ std::vector<geometry_msgs::PoseStamped> g_posesSlam;
 std::vector<geometry_msgs::PoseStamped> g_posesGt;
 std::vector<Eigen::Matrix3d> g_transGt;
 std::vector<Eigen::Matrix3d> g_transSlam;
-std::vector<Eigen::Vector3d> g_errors;
+std::vector<Eigen::Vector3d> g_errorsAbs;
 
 const ros::Duration g_zero(0.0);
 
@@ -63,9 +64,10 @@ int main(int argc, char ** argv)
   //parse relations()
   std::srand(time(NULL));
   syncMsgs();
+  editData(); // testing
   evaluate();
   printResult();
-
+  
 }
 
 void cropMsgs()
@@ -359,17 +361,40 @@ void evaluate()
     error(1) = std::abs(d(1, 2));
     error(2) = std::abs(std::asin(d(1,0)));
 
-    g_errors.push_back(error);
+    g_errorsAbs.push_back(error);
   }
 }
 
 void printResult()
 {
-  std::cout << "size of errors: " << g_errors.size() << std::endl;
+  std::cout << "size of errors: " << g_errorsAbs.size() << std::endl;
 
-  for(int i = 0; i < g_errors.size(); i++)
+  for(int i = 0; i < g_errorsAbs.size(); i++)
   {
-    std::cout << g_errors.at(i) << std::endl;
+    std::cout << g_errorsAbs.at(i) << std::endl;
     std::cout << "----------------------" << std::endl;
   }
+
+  double meanTrans = 0.0;
+  double meanPhi = 0.0;
+  double varTrans = 0.0;
+  double varPhi = 0.0;
+
+  for(int i = 0; i < g_errorsAbs.size(); i++)
+  {
+    meanTrans += std::sqrt(std::pow(g_errorsAbs.at(i).x(),2) + std::pow(g_errorsAbs.at(i).y(),2)) / g_errorsAbs.size();
+    meanPhi += std::abs(std::asin(g_errorsAbs.at(i).z())) / g_errorsAbs.size();
+  }
+
+  std::cout << "mean trans: " << meanTrans << "mean phi: " << meanPhi << std::endl;
 }
+
+void editData()
+{
+  for(int i = 0; i < g_transSlam.size(); i++)
+  {
+    g_transSlam.at(i)(0,2) += (unsigned int) std::rand() % 40;  
+    g_transSlam.at(i)(1,2) += (unsigned int) std::rand() % 40;
+  }
+}
+
