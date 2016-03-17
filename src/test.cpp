@@ -21,9 +21,11 @@
 #include "Eigen/Dense"
 #include <ctime>
 
-#define DIFFMAX 0.001
+#define DIFFMAX 0.0001
 #define MAXDIST 50
-#define SAMPLES 10000
+#define SAMPLES 90000
+#define SIMULATED_ERROR 800
+#define SIMULATED_ERROR_TIME 0.001
 
 void checkInput(int argc, char ** argv);
 void printUsage();
@@ -58,13 +60,17 @@ bool g_relationsProvided;
 
 int main(int argc, char ** argv)
 {
+  std::srand(time(NULL));
 
   checkInput(argc, argv);
   parseMsgs();
-  //parse relations()
-  std::srand(time(NULL));
-  syncMsgs();
+
   editData(); // testing
+  //parse relations()
+
+  cropMsgs();
+  syncMsgs();
+
   evaluate();
   printResult();
   
@@ -73,21 +79,23 @@ int main(int argc, char ** argv)
 void cropMsgs()
 {
   ros::Time stampSlamBegin = g_posesSlam.begin()->header.stamp;
-  ros::Time stampSlamEnd = g_posesSlam.end()->header.stamp;
+  ros::Time stampSlamEnd = (g_posesSlam.end()-1)->header.stamp;
 
   std::vector<geometry_msgs::PoseStamped>::const_iterator it1 = g_posesGt.begin();
-  std::vector<geometry_msgs::PoseStamped>::const_iterator it2 = g_posesGt.end();
+  std::vector<geometry_msgs::PoseStamped>::const_iterator it2 = g_posesGt.end()-1;
 
   while(it1->header.stamp < stampSlamBegin)
   {
     it1++;
 
-    if(it1 == g_posesGt.end())
+    if(it1 == g_posesGt.end()-1)
     {
-      std::cout << __PRETTY_FUNCTION__ << "--> timing error --> exit" << std::endl;
+      std::cout << __PRETTY_FUNCTION__ << "--> timing error 01 --> exit" << std::endl;
       exit(EXIT_FAILURE);
     }
   }
+
+  std::cout << it2->header.stamp << " "<<  stampSlamEnd<< std::endl;
 
   while(it2->header.stamp > stampSlamEnd)
   {
@@ -95,18 +103,21 @@ void cropMsgs()
 
     if(it2 == g_posesGt.begin())
     {
-      std::cout << __PRETTY_FUNCTION__ << "--> timing error --> exit" << std::endl;
+      std::cout << __PRETTY_FUNCTION__ << "--> timing error 02 --> exit" << std::endl;
       exit(EXIT_FAILURE);
     }
   }
 
-  if(it1 == g_posesGt.begin() && it2 == g_posesGt.end())
+  if(it1 == g_posesGt.begin() && it2 == g_posesGt.end()-1)
   {
-    std::cout << "no messages croped" << std::endl;
+    std::cout << "no messages croped; timing OK" << std::endl;
   }
   else
   {
     std::cout << "WARNING Messages Croped" << std::endl; // TODO: better output here
+    std::cout << "leading cropped messages: " << std::distance((std::vector<geometry_msgs::PoseStamped>::const_iterator) g_posesGt.begin(), it1) << std::endl;
+    std::cout << "trailing cropped messages: " << std::distance(it2, (std::vector<geometry_msgs::PoseStamped>::const_iterator) g_posesGt.end()-1) << std::endl;
+
     std::vector<geometry_msgs::PoseStamped> tmp(it1, it2); // crop vector
     g_posesGt = tmp;
   }
@@ -239,14 +250,14 @@ void syncMsg(std::vector<geometry_msgs::PoseStamped>::const_iterator gt)
 {
   ros::Time stampGt = gt->header.stamp;
 
-  std::vector<geometry_msgs::PoseStamped>::const_iterator it1 = g_posesSlam.end();
+  std::vector<geometry_msgs::PoseStamped>::const_iterator it1 = g_posesSlam.end()-1;
   std::vector<geometry_msgs::PoseStamped>::const_iterator it2 = g_posesSlam.begin();
 
   while(it2->header.stamp < stampGt)
   {
     it2++;
 
-    if(it2 == g_posesGt.end())
+    if(it2 == g_posesGt.end()-1)
     {
       std::cout << __PRETTY_FUNCTION__ << "--> timing error --> exit" << std::endl;
       exit(EXIT_FAILURE);
@@ -264,7 +275,6 @@ void syncMsg(std::vector<geometry_msgs::PoseStamped>::const_iterator gt)
     }
   }
 
-  std::cout << "it dist = :" << std::distance(it1,it2) << std::endl;
   assert(std::distance(it1,it2) == 1); // debug
 
   ros::Duration diffSlam;
@@ -272,7 +282,7 @@ void syncMsg(std::vector<geometry_msgs::PoseStamped>::const_iterator gt)
   assert(diffSlam > g_zero);
 
   ros::Duration diffGt;
-  diffGt = it1->header.stamp - gt->header.stamp;
+  diffGt = gt->header.stamp - it1->header.stamp;
   assert(diffGt > g_zero);
 
   assert(diffSlam > diffGt);
@@ -341,7 +351,7 @@ void evaluate()
 {
   std::srand(time(NULL));
 
-  for(int i = 0; i < SAMPLES; i++)
+  for(long int i = 0; i < SAMPLES; i++)
   {
     unsigned int indexRand1 = std::rand() % g_transGt.size();
     unsigned int indexRand2 = std::rand() % g_transGt.size();
@@ -369,32 +379,43 @@ void printResult()
 {
   std::cout << "size of errors: " << g_errorsAbs.size() << std::endl;
 
-  for(int i = 0; i < g_errorsAbs.size(); i++)
-  {
-    std::cout << g_errorsAbs.at(i) << std::endl;
-    std::cout << "----------------------" << std::endl;
-  }
-
   double meanTrans = 0.0;
   double meanPhi = 0.0;
   double varTrans = 0.0;
   double varPhi = 0.0;
+  double maxTrans = 0.0;
+  double maxPhi = 0.0;
 
   for(int i = 0; i < g_errorsAbs.size(); i++)
   {
-    meanTrans += std::sqrt(std::pow(g_errorsAbs.at(i).x(),2) + std::pow(g_errorsAbs.at(i).y(),2)) / g_errorsAbs.size();
-    meanPhi += std::abs(std::asin(g_errorsAbs.at(i).z())) / g_errorsAbs.size();
+    double trans = std::sqrt(std::pow(g_errorsAbs.at(i).x(),2) + std::pow(g_errorsAbs.at(i).y(),2));
+    double phi = std::abs(std::asin(g_errorsAbs.at(i).z()));
+
+    meanTrans += trans / g_errorsAbs.size();
+    meanPhi += phi / g_errorsAbs.size();
+
+    maxPhi = std::max(maxPhi, std::abs(phi));
+    maxTrans = std::max(maxTrans, std::abs(trans));
   }
 
-  std::cout << "mean trans: " << meanTrans << "mean phi: " << meanPhi << std::endl;
+  std::cout <<
+      "mean trans: " << meanTrans <<
+      " mean phi: " << meanPhi <<
+      " max trans: " << maxTrans <<
+      " maxPhi: " << maxPhi << std::endl;
 }
 
 void editData()
 {
-  for(int i = 0; i < g_transSlam.size(); i++)
+  for(int i = 0; i < g_posesSlam.size(); i++)
   {
-    g_transSlam.at(i)(0,2) += (unsigned int) std::rand() % 40;  
-    g_transSlam.at(i)(1,2) += (unsigned int) std::rand() % 40;
+    if (SIMULATED_ERROR != 0)
+    {
+      g_posesSlam.at(i).pose.position.x += (unsigned int) (std::rand() % ((2 * SIMULATED_ERROR) - SIMULATED_ERROR));
+      g_posesSlam.at(i).pose.position.y += (unsigned int) (std::rand() % ((2 * SIMULATED_ERROR) - SIMULATED_ERROR));
+      ros::Duration dur(0);
+      g_posesSlam.at(i).header.stamp = g_posesSlam.at(i).header.stamp + dur;
+    }
   }
 }
 
